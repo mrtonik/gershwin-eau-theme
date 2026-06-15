@@ -189,6 +189,17 @@ static Eau *gSharedEauInstance = nil;
 
 + (void)_registerUIBridgeService:(id)unused
 {
+  // If the standalone UIBridge.bundle is loaded (mrtonik/UIBridgeBundle), it
+  // vends the per-PID UIBridge DO service. The theme must then stay out of it
+  // entirely: registering the same name collides, and Eau's global
+  // NSConnectionDidInitializeNotification observer (added below) would
+  // -enableMultipleThreads the bundle's deliberately single-threaded connection.
+  // Returning here skips both. See the bundle's README for the extraction plan.
+  if (NSClassFromString(@"UIBridgeService") != Nil) {
+    NSLog(@"Eau: UIBridge.bundle present — theme not registering its own UIBridge service");
+    return;
+  }
+
   // Check if we have a valid Eau instance
   if (!gSharedEauInstance) {
     // Try to get from GSTheme
