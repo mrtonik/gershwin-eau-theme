@@ -67,7 +67,7 @@ NSColor *EauSafeCalibratedRGB(NSColor *c)
   gForceExternalMenuByEnv = EauEnvironmentContainsAppMenuToken();
   if (gForceExternalMenuByEnv)
     {
-      NSLog(@"Eau: appmenu token detected in environment, forcing external menu mode");
+      EAULOG(@"Eau: appmenu token detected in environment, forcing external menu mode");
     }
 
 }
@@ -439,7 +439,7 @@ NSColor *EauSafeCalibratedRGB(NSColor *c)
 
 - (void)_menuClientConnectionDidDie:(NSNotification *)notification
 {
-  NSLog(@"Eau: Menu client connection died");
+  EAULOG(@"Eau: Menu client connection died");
   EAULOG(@"Eau: Menu client connection died");
   if (menuClientReceivePort != nil)
     {
@@ -458,7 +458,7 @@ NSColor *EauSafeCalibratedRGB(NSColor *c)
 
 - (void)_menuServerConnectionDidDie:(NSNotification *)notification
 {
-  NSLog(@"Eau: Menu server connection died");
+  EAULOG(@"Eau: Menu server connection died");
   EAULOG(@"Eau: Menu server connection died");
   menuServerConnection = nil;
   menuServerProxy = nil;
@@ -530,18 +530,18 @@ NSColor *EauSafeCalibratedRGB(NSColor *c)
 - (void) sendMenu:(NSWindow*)w {
 
   NSNumber *windowId = [self _windowIdentifierForWindow:w];
-  NSLog(@"Eau: sendMenu");
+  EAULOG(@"Eau: sendMenu");
   NSMenu *m = [menuByWindowId objectForKey:windowId];
 
   @try
     {
-      // NSLog(@"Eau: Calling updateMenuForWindow on Menu.app server proxy");
+      // EAULOG(@"Eau: Calling updateMenuForWindow on Menu.app server proxy");
       NSDictionary *menuData = [self _serializeMenu:m];
 
       [(id<GSGNUstepMenuServer>)menuServerProxy updateMenuForWindow:windowId
 							   menuData:menuData
 							 clientName:[self _menuClientName]];
-      NSLog(@"Eau: Successfully sent menu update to Menu.app");
+      EAULOG(@"Eau: Successfully sent menu update to Menu.app");
       EAULOG(@"Eau: Updated GNUstep menu for window %@", windowId);
     }
   @catch (NSException *exception)
@@ -628,7 +628,7 @@ NSColor *EauSafeCalibratedRGB(NSColor *c)
   NSNumber *windowId = [self _windowIdentifierForWindow:w];
   if (windowId == nil)
     {
-      NSLog(@"Eau: Could not resolve window identifier, using standard menu for window: %@", w);
+      EAULOG(@"Eau: Could not resolve window identifier, using standard menu for window: %@", w);
       EAULOG(@"Eau: Could not resolve window identifier, using standard menu for window: %@", w);
       if (!gForceExternalMenuByEnv)
         {
@@ -639,7 +639,7 @@ NSColor *EauSafeCalibratedRGB(NSColor *c)
 
   if (m == nil || [m numberOfItems] == 0)
     {
-      NSLog(@"Eau: Menu is nil or empty (items=%ld)", (long)[m numberOfItems]);
+      EAULOG(@"Eau: Menu is nil or empty (items=%ld)", (long)[m numberOfItems]);
       BOOL hadMenu = ([menuByWindowId objectForKey:windowId] != nil);
       [menuByWindowId removeObjectForKey:windowId];
 
@@ -647,13 +647,13 @@ NSColor *EauSafeCalibratedRGB(NSColor *c)
         {
           @try
             {
-              NSLog(@"Eau: Unregistering window %@ from Menu.app", windowId);
+              EAULOG(@"Eau: Unregistering window %@ from Menu.app", windowId);
               [(id<GSGNUstepMenuServer>)menuServerProxy unregisterWindow:windowId
                                                                 clientName:[self _menuClientName]];
             }
           @catch (NSException *exception)
             {
-              NSLog(@"Eau: Exception unregistering window %@: %@", windowId, exception);
+              EAULOG(@"Eau: Exception unregistering window %@: %@", windowId, exception);
               EAULOG(@"Eau: Exception unregistering window %@: %@", windowId, exception);
             }
         }
@@ -666,7 +666,7 @@ NSColor *EauSafeCalibratedRGB(NSColor *c)
       return;
     }
 
-  // NSLog(@"Eau: Storing menu in cache for windowId=%@, menu has %ld items", windowId, (long)[m numberOfItems]);
+  // EAULOG(@"Eau: Storing menu in cache for windowId=%@, menu has %ld items", windowId, (long)[m numberOfItems]);
   // TOM: i believe this is redundant
   // [m update];
 
@@ -674,7 +674,7 @@ NSColor *EauSafeCalibratedRGB(NSColor *c)
 
   if (![self _ensureMenuClientRegistered])
     {
-      NSLog(@"Eau: Failed to register GNUstep menu client, using standard menu for window: %@", w);
+      EAULOG(@"Eau: Failed to register GNUstep menu client, using standard menu for window: %@", w);
       EAULOG(@"Eau: Failed to register GNUstep menu client, using standard menu for window: %@", w);
       if (!gForceExternalMenuByEnv)
         {
@@ -685,7 +685,7 @@ NSColor *EauSafeCalibratedRGB(NSColor *c)
 
   if (![self _ensureMenuServerConnection])
     {
-      NSLog(@"Eau: GNUstep menu server unavailable, automatic Menu.app restart disabled for window: %@", w);
+      EAULOG(@"Eau: GNUstep menu server unavailable, automatic Menu.app restart disabled for window: %@", w);
       EAULOG(@"Eau: GNUstep menu server unavailable, automatic Menu.app restart disabled for window: %@", w);
       // [[EauMenuRelaunchManager sharedManager] relaunchMenuProcessIfSnapshotAvailable];
       return;
@@ -698,7 +698,7 @@ NSColor *EauSafeCalibratedRGB(NSColor *c)
 
 - (void)_performMenuActionFromIPC:(NSDictionary *)info
 {
-  NSLog(@"Eau: _performMenuActionFromIPC called with info: %@", info);
+  EAULOG(@"Eau: _performMenuActionFromIPC called with info: %@", info);
   EAULOG(@"Eau: _performMenuActionFromIPC called with info: %@", info);
   
   NSNumber *windowId = [info objectForKey:@"windowId"];
@@ -767,8 +767,8 @@ NSColor *EauSafeCalibratedRGB(NSColor *c)
     }
 
   EAULOG(@"Eau: Sending action %@ to target %@ from menu item '%@'", NSStringFromSelector(action), target, [menuItem title]);
-  BOOL handled = [NSApp sendAction:action to:target from:menuItem];
-  NSLog(@"Eau: sendAction returned %@ for menu item '%@'", handled ? @"YES" : @"NO", [menuItem title]);
+  BOOL handled __attribute__((unused)) = [NSApp sendAction:action to:target from:menuItem];
+  EAULOG(@"Eau: sendAction returned %@ for menu item '%@'", handled ? @"YES" : @"NO", [menuItem title]);
   EAULOG(@"Eau: Action sent successfully");
 }
 
@@ -803,7 +803,7 @@ NSColor *EauSafeCalibratedRGB(NSColor *c)
 
 - (oneway void)activateMenuItemAtPath:(NSArray *)indexPath forWindow:(NSNumber *)windowId
 {
-  NSLog(@"Eau: activateMenuItemAtPath called - indexPath: %@, windowId: %@", indexPath, windowId);
+  EAULOG(@"Eau: activateMenuItemAtPath called - indexPath: %@, windowId: %@", indexPath, windowId);
   EAULOG(@"Eau: activateMenuItemAtPath called - indexPath: %@, windowId: %@", indexPath, windowId);
   
   NSDictionary *payload = [NSDictionary dictionaryWithObjectsAndKeys:
@@ -901,7 +901,7 @@ NSColor *EauSafeCalibratedRGB(NSColor *c)
 
 - (oneway void)requestMenuUpdateForWindow:(NSNumber *)windowId
 {
-  NSLog(@"Eau: requestMenuUpdateForWindow called - windowId: %@", windowId);
+  EAULOG(@"Eau: requestMenuUpdateForWindow called - windowId: %@", windowId);
   EAULOG(@"Eau: requestMenuUpdateForWindow called - windowId: %@", windowId);
 
   if (![NSThread isMainThread])
