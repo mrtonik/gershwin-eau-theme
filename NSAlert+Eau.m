@@ -81,6 +81,13 @@ static const void *kEAUAlertWindowRetainKey = &kEAUAlertWindowRetainKey;
     [self setLevel: NSModalPanelWindowLevel];
     [self setHidesOnDeactivate: NO];
     [self setBecomesKeyOnlyIfNeeded: NO];
+    // One-shot: destroys the X11 back-end window when ordered out (during
+    // alert dismissal).  This prevents a crash at dealloc time: NSWindow
+    // dealloc calls _terminateBackendWindow, but if the X11 window was
+    // already destroyed, _windowNum is 0 and _terminateBackendWindow is
+    // safely skipped.  Without this, _terminateBackendWindow in dealloc
+    // tries to destroy the X11 window and crashes (segfault).
+    [self setOneShot: YES];
     
     NSView *content = [self contentView];
     NSFont *titleFont = METRICS_FONT_SYSTEM_BOLD_13;
@@ -230,7 +237,7 @@ static const void *kEAUAlertWindowRetainKey = &kEAUAlertWindowRetainKey;
             if ([box borderType] == NSGrooveBorder && [box frame].size.height <= 3.0)
             {
                 [box removeFromSuperview];
-                EAULOG(@"Eau: Removed horizontal line from GSAlertPanel");
+                NSDebugLog(@"Eau: Removed horizontal line from GSAlertPanel");
             }
         }
     }
@@ -254,7 +261,7 @@ static const void *kEAUAlertWindowRetainKey = &kEAUAlertWindowRetainKey;
 // This ensures focus and pulsing work for legacy alert panels
 - (NSInteger) eau_runModalHelper
 {
-    EAULOG(@"Eau: eau_runModalHelper called for GSAlertPanel");
+    NSDebugLog(@"Eau: eau_runModalHelper called for GSAlertPanel");
     
     // Get the default button from the ivar
     NSButton *defBtn = [self eau_getDefButton];
@@ -270,7 +277,7 @@ static const void *kEAUAlertWindowRetainKey = &kEAUAlertWindowRetainKey;
         [(NSPanel *)self makeFirstResponder: defBtn];
         // Set default button cell to enable pulsing animation
         [(NSPanel *)self setDefaultButtonCell: [defBtn cell]];
-        EAULOG(@"Eau: GSAlertPanel set default button focus and pulsing for button: %@", defBtn);
+        NSDebugLog(@"Eau: GSAlertPanel set default button focus and pulsing for button: %@", defBtn);
     }
     
     // Call the original runModal implementation
@@ -311,7 +318,7 @@ static const void *kEAUAlertWindowRetainKey = &kEAUAlertWindowRetainKey;
     [button setAction: @selector(buttonAction:)];
     [button setTag: tag];
     [button setFont: [NSFont systemFontOfSize: 0]];
-    EAULOG(@"Eau: Created button with tag %ld, target: %@, action: %@", tag, [button target], NSStringFromSelector([button action]));
+    NSDebugLog(@"Eau: Created button with tag %ld, target: %@, action: %@", tag, [button target], NSStringFromSelector([button action]));
     return button;
 }
 
@@ -666,8 +673,8 @@ static const void *kEAUAlertWindowRetainKey = &kEAUAlertWindowRetainKey;
         [self makeFirstResponder: defButton];
     }
     
-    EAULOG(@"Eau: runModal - window is key: %d", [self isKeyWindow]);
-    EAULOG(@"Eau: runModal - first responder: %@", [self firstResponder]);
+    NSDebugLog(@"Eau: runModal - window is key: %d", [self isKeyWindow]);
+    NSDebugLog(@"Eau: runModal - first responder: %@", [self firstResponder]);
     
     NSLog(@"Eau: About to call runModalForWindow");
     result = [NSApp runModalForWindow: self];
@@ -687,7 +694,7 @@ static const void *kEAUAlertWindowRetainKey = &kEAUAlertWindowRetainKey;
 - (void) keyDown: (NSEvent *)event
 {
     NSString *chars = [event characters];
-    EAULOG(@"Eau: keyDown received: '%@'", chars);
+    NSDebugLog(@"Eau: keyDown received: '%@'", chars);
     if ([chars length] > 0)
     {
         unichar keyChar = [chars characterAtIndex: 0];
@@ -695,7 +702,7 @@ static const void *kEAUAlertWindowRetainKey = &kEAUAlertWindowRetainKey;
     // Handle Enter/Return for default button
     if (keyChar == '\r' && useControl(defButton))
     {
-        EAULOG(@"Eau: keyDown Enter pressed, clicking default button");
+        NSDebugLog(@"Eau: keyDown Enter pressed, clicking default button");
         [self buttonAction: defButton];
         return;
     }
@@ -1182,7 +1189,7 @@ static void setKeyEquivalent(NSButton *button)
         return;
     didSwizzle = YES;
     
-    EAULOG(@"Eau: Installing NSAlert customizations");
+    NSDebugLog(@"Eau: Installing NSAlert customizations");
     // NSLog(@"Eau: Installing NSAlert customizations - FORCED LOG");
     
     // Swizzle NSAlert's _setupPanel to use EauAlertPanel
@@ -1215,12 +1222,12 @@ static void setKeyEquivalent(NSButton *button)
         {
             method_exchangeImplementations(origSetupMethod, swizzledSetupMethod);
         }
-        EAULOG(@"Eau: NSAlert _setupPanel swizzled successfully");
+        NSDebugLog(@"Eau: NSAlert _setupPanel swizzled successfully");
         // NSLog(@"Eau: NSAlert _setupPanel swizzled successfully - FORCED LOG");
     }
     else
     {
-        EAULOG(@"Eau: Warning - could not find _setupPanel method to swizzle");
+        NSDebugLog(@"Eau: Warning - could not find _setupPanel method to swizzle");
         // NSLog(@"Eau: Warning - could not find _setupPanel method to swizzle - FORCED LOG");
     }
     
@@ -1248,11 +1255,11 @@ static void setKeyEquivalent(NSButton *button)
         {
             method_exchangeImplementations(origRunModalMethod, swizzledRunModalMethod);
         }
-        EAULOG(@"Eau: NSAlert runModal swizzled successfully");
+        NSDebugLog(@"Eau: NSAlert runModal swizzled successfully");
     }
     else
     {
-        EAULOG(@"Eau: Warning - could not find runModal method to swizzle");
+        NSDebugLog(@"Eau: Warning - could not find runModal method to swizzle");
     }
     
     // Also swizzle GSAlertPanel's _initWithoutGModel to handle legacy alert functions
@@ -1278,7 +1285,7 @@ static void setKeyEquivalent(NSButton *button)
             if (origInitMethod && newSwizzledMethod)
             {
                 method_exchangeImplementations(origInitMethod, newSwizzledMethod);
-                EAULOG(@"Eau: GSAlertPanel _initWithoutGModel swizzled successfully");
+                NSDebugLog(@"Eau: GSAlertPanel _initWithoutGModel swizzled successfully");
             }
         }
 
@@ -1353,7 +1360,7 @@ static void setKeyEquivalent(NSButton *button)
                     if ([textField isEditable])
                     {
                         firstTextField = textField;
-                        EAULOG(@"NSAlert+Eau: Found editable text field %p in alert", textField);
+                        NSDebugLog(@"NSAlert+Eau: Found editable text field %p in alert", textField);
                         break;
                     }
                 }
@@ -1362,21 +1369,21 @@ static void setKeyEquivalent(NSButton *button)
             // Set initial first responder to enable immediate keyboard input
             if (firstTextField)
             {
-                EAULOG(@"NSAlert+Eau: Setting initial first responder to text field %p", firstTextField);
+                NSDebugLog(@"NSAlert+Eau: Setting initial first responder to text field %p", firstTextField);
                 [window setInitialFirstResponder: firstTextField];
             }
             else
             {
-                EAULOG(@"NSAlert+Eau: No editable text field found in alert");
+                NSDebugLog(@"NSAlert+Eau: No editable text field found in alert");
             }
         }
         
         // CRITICAL: Make the alert window key so it receives keyboard input immediately.
         // Without this, the alert appears but doesn't have focus - user must click it.
-        EAULOG(@"NSAlert+Eau: Activating app and making alert window key for immediate input");
+        NSDebugLog(@"NSAlert+Eau: Activating app and making alert window key for immediate input");
         [NSApp activateIgnoringOtherApps: YES];
         [window makeKeyAndOrderFront: nil];
-        EAULOG(@"NSAlert+Eau: Alert window is now key: %d", [window isKeyWindow]);
+        NSDebugLog(@"NSAlert+Eau: Alert window is now key: %d", [window isKeyWindow]);
 
         if ([window isKindOfClass: [EauAlertPanel class]])
         {
@@ -1390,7 +1397,7 @@ static void setKeyEquivalent(NSButton *button)
             [window orderFrontRegardless];
             [window makeKeyAndOrderFront: nil];
             
-            EAULOG(@"Eau: NSAlert running modal for window: %@", window);
+            NSDebugLog(@"Eau: NSAlert running modal for window: %@", window);
             [NSApp runModalForWindow: window];
             if ([window respondsToSelector: @selector(result)])
             {
@@ -1453,10 +1460,21 @@ static void setKeyEquivalent(NSButton *button)
             } @catch (NSException *e) {
                 NSLog(@"Eau: Exception during window cleanup: %@", e);
             }
-            
-            NSLog(@"Eau: Clearing _window ivar and associated object on NSAlert");
+
+            NSLog(@"Eau: Clearing _window ivar on NSAlert (keeping associated object to prevent premature dealloc)");
             object_setIvar(self, windowIvar, nil);
-            objc_setAssociatedObject(self, kEAUAlertWindowRetainKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+            // IMPORTANT: Do NOT release the associated object here.  The _window ivar
+            // in GNUstep's NSAlert is __weak, so the associated object with
+            // OBJC_ASSOCIATION_RETAIN_NONATOMIC is the ONLY strong reference keeping
+            // the EauAlertPanel alive.  Releasing it here triggers -dealloc while the
+            // window system (DPS/X11 backend) may still have pending operations or
+            // references to the panel, causing a crash (segfault) after dealloc
+            // completes.  The associated object will be automatically released when
+            // NSAlert itself is deallocated, which is a safe time for the panel to die.
+            //
+            // The panel is fully inert at this point (no delegate, no animation, ordered
+            // out) so keeping it alive until NSAlert deallocates is safe and prevents
+            // the use-after-free crash.
         }
     }
     else
@@ -1464,7 +1482,7 @@ static void setKeyEquivalent(NSButton *button)
         NSLog(@"Eau: _window ivar not found during cleanup, trying KVC");
         @try {
             [self setValue: nil forKey: @"_window"];
-            objc_setAssociatedObject(self, kEAUAlertWindowRetainKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+            // Also keep the associated object here for the same reason as above.
         }
         @catch (NSException *exception) {
             // Ignore if ivar doesn't exist

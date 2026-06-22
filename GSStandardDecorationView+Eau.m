@@ -1,5 +1,6 @@
 #import <GNUstepGUI/GSWindowDecorationView.h>
 #import <GNUstepGUI/GSTheme.h>
+#import <GNUstepGUI/GSDisplayServer.h>
 #import <objc/runtime.h>
 #import "Eau.h"
 #import "EauTitleBarButton.h"
@@ -25,7 +26,7 @@ static char originalFrameKey;  // Store original frame before zoom
 @implementation Eau(GSStandardWindowDecorationView)
 - (void) _overrideGSStandardWindowDecorationViewMethod_updateRects {
   GSStandardWindowDecorationView* xself = (GSStandardWindowDecorationView*)self;
-  EAULOG(@"GSStandardDecorationView+Eau updateRects");
+  NSDebugLog(@"GSStandardDecorationView+Eau updateRects");
   [xself EAUupdateRects];
 }
 @end
@@ -40,9 +41,9 @@ static char originalFrameKey;  // Store original frame before zoom
 
   // Initialize zoom button if not already done (only for resizable windows)
   NSUInteger styleMask = [[self window] styleMask];
-  EAULOG(@"Checking zoom button creation: hasZoomButton=%d, hasTitleBar=%d, resizable=%d", [self hasZoomButton], hasTitleBar, (int)(styleMask & NSResizableWindowMask));
+  NSDebugLog(@"Checking zoom button creation: hasZoomButton=%d, hasTitleBar=%d, resizable=%d", [self hasZoomButton], hasTitleBar, (int)(styleMask & NSResizableWindowMask));
   if (![self hasZoomButton] && hasTitleBar && (styleMask & NSResizableWindowMask)) {
-    EAULOG(@"Creating zoom button for window decoration view");
+    NSDebugLog(@"Creating zoom button for window decoration view");
     NSButton *zButton;
     if (isOrb) {
       EauWindowButton *orbButton = [[EauWindowButton alloc] init];
@@ -59,16 +60,16 @@ static char originalFrameKey;  // Store original frame before zoom
       zButton = [EauTitleBarButton maximizeButton];
     }
     if (zButton) {
-      EAULOG(@"Zoom button created successfully, setting up target and action");
+      NSDebugLog(@"Zoom button created successfully, setting up target and action");
       [self setZoomButton:zButton];
       [zButton setTarget:self];
       [zButton setAction:@selector(EAUzoomButtonClicked:)];
       [zButton setEnabled:YES];
       [self addSubview:zButton];
       [self setHasZoomButton:YES];
-      EAULOG(@"Zoom button target: %@, action: %@, window: %@", [zButton target], NSStringFromSelector([zButton action]), window);
+      NSDebugLog(@"Zoom button target: %@, action: %@, window: %@", [zButton target], NSStringFromSelector([zButton action]), window);
     } else {
-      EAULOG(@"Failed to create zoom button - zButton is nil");
+      NSDebugLog(@"Failed to create zoom button - zButton is nil");
     }
   }
 
@@ -181,7 +182,7 @@ static char originalFrameKey;  // Store original frame before zoom
 
       NSButton *zoomButton = [self zoomButton];
       if (zoomButton) {
-        EAULOG(@"Updating zoom button frame: %@", NSStringFromRect(zoomButtonRect));
+        NSDebugLog(@"Updating zoom button frame: %@", NSStringFromRect(zoomButtonRect));
 
         [zoomButton setTarget:self];
         [zoomButton setAction:@selector(EAUzoomButtonClicked:)];
@@ -235,39 +236,173 @@ static char originalFrameKey;  // Store original frame before zoom
 
 - (void) EAUzoomButtonClicked:(id)sender
 {
-  EAULOG(@"*** ZOOM BUTTON CLICKED! sender: %@, window: %@", sender, window);
-  EAULOG(@"*** Window isZoomed: %d", [window isZoomed]);
+  NSDebugLog(@"*** ZOOM BUTTON CLICKED! sender: %@, window: %@", sender, window);
+  NSDebugLog(@"*** Window isZoomed: %d", [window isZoomed]);
 
   if ([window isZoomed]) {
     // Window is zoomed, manually restore it to original frame
-    EAULOG(@"*** Window is zoomed, attempting manual unzoom");
+    NSDebugLog(@"*** Window is zoomed, attempting manual unzoom");
 
     NSValue *originalFrameValue = objc_getAssociatedObject(window, &originalFrameKey);
     if (originalFrameValue) {
       NSRect originalFrame = [originalFrameValue rectValue];
-      EAULOG(@"*** Restoring window to original frame: %@", NSStringFromRect(originalFrame));
+      NSDebugLog(@"*** Restoring window to original frame: %@", NSStringFromRect(originalFrame));
       [window setFrame:originalFrame display:YES animate:NO];
 
       // Clear the stored frame
       objc_setAssociatedObject(window, &originalFrameKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     } else {
-      EAULOG(@"*** No original frame stored, falling back to performZoom");
+      NSDebugLog(@"*** No original frame stored, falling back to performZoom");
       [window performZoom:sender];
     }
   } else {
     // Window is not zoomed, store current frame and zoom it
-    EAULOG(@"*** Window is not zoomed, storing frame and zooming");
+    NSDebugLog(@"*** Window is not zoomed, storing frame and zooming");
 
     // Store current frame before zooming
     NSRect currentFrame = [window frame];
     NSValue *frameValue = [NSValue valueWithRect:currentFrame];
     objc_setAssociatedObject(window, &originalFrameKey, frameValue, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    EAULOG(@"*** Stored original frame: %@", NSStringFromRect(currentFrame));
+    NSDebugLog(@"*** Stored original frame: %@", NSStringFromRect(currentFrame));
 
     [window zoom:sender];
   }
 
-  EAULOG(@"*** After zoom call - Window isZoomed: %d", [window isZoomed]);
+  NSDebugLog(@"*** After zoom call - Window isZoomed: %d", [window isZoomed]);
+}
+
+#pragma mark - Title text truncation
+
+// Helper: create a middle-truncated version of a string for window titles.
+// Returns a string with "…" inserted in the middle when the gap between
+// the centered title and the nearest button would be less than 24px.
+static NSString *EAUTruncateTitleWithMiddleEllipsis(NSString *title,
+                                                     CGFloat titleMaxWidth,
+                                                     CGFloat interButtonWidth)
+{
+  if ([title length] == 0 || titleMaxWidth <= 0) return title;
+
+  NSFont *font = [NSFont systemFontOfSize:0];
+  NSDictionary *attrs = @{ NSFontAttributeName: font };
+
+  CGFloat titleWidth = [title sizeWithAttributes:attrs].width;
+  // Only truncate when gap between centered title and nearest button < 24px
+  CGFloat gap = (interButtonWidth - titleWidth) / 2.0;
+  if (gap >= 24.0) return title;
+
+  // Need middle ellipsis — split the string into left/right parts.
+  // Binary search for the maximum prefix+middle+suffix that fits.
+  NSString *ellipsis = @"\xe2\x80\xa6"; // Unicode HORIZONTAL ELLIPSIS (…)
+
+  NSUInteger len = [title length];
+  NSUInteger lo = 0, hi = len - 1;
+
+  while (lo < hi) {
+    NSUInteger leftLen = (lo + hi + 1) / 2;
+    NSUInteger rightLen = leftLen;
+    if (leftLen + rightLen + 1 > len) rightLen = len - leftLen;
+    if (leftLen + rightLen < 2) { hi = leftLen - 1; continue; }
+
+    NSString *leftPart = [title substringToIndex:leftLen];
+    NSString *rightPart = [title substringFromIndex:len - rightLen];
+    NSString *candidate = [NSString stringWithFormat:@"%@%@%@",
+                            leftPart, ellipsis, rightPart];
+    CGFloat w = [candidate sizeWithAttributes:attrs].width;
+    if (w <= titleMaxWidth) {
+      lo = leftLen;
+    } else {
+      hi = leftLen - 1;
+    }
+  }
+
+  // Build final truncated string
+  NSUInteger bestLeft = lo;
+  NSUInteger bestRight = lo;
+  if (bestLeft + bestRight + 1 > len) bestRight = len - bestLeft;
+  if (bestLeft < 1 || bestRight < 1) {
+    // Fallback: show ellipsis with first and last character
+    bestLeft = 1;
+    bestRight = 1;
+  }
+
+  NSString *leftPart = [title substringToIndex:bestLeft];
+  NSString *rightPart = [title substringFromIndex:len - bestRight];
+  return [NSString stringWithFormat:@"%@%@%@", leftPart, ellipsis, rightPart];
+}
+
+@end
+
+// Original setTitle: IMP saved before swizzling
+static IMP _originalNSWindowSetTitle = NULL;
+
+// Swizzled setTitle: implementation
+static void EAU_newNSWindowSetTitle(id self, SEL _cmd, NSString *title)
+{
+  if (title != nil && [title length] > 0)
+    {
+      NSRect frame = [self frame];
+      NSUInteger styleMask = [self styleMask];
+      CGFloat availableWidth = frame.size.width;
+
+      // Subtract left/right decoration offsets
+      float leftOff = 0, rightOff = 0, topOff = 0, bottomOff = 0;
+      id server = GSCurrentServer();
+      if ([server respondsToSelector: NSSelectorFromString(@"styleoffsets::::")])
+        {
+          IMP imp = [server methodForSelector: NSSelectorFromString(@"styleoffsets::::")];
+          if (imp)
+            {
+              ((void (*)(id, SEL, float*, float*, float*, float*))imp)
+                (server, NSSelectorFromString(@"styleoffsets::::"),
+                 &leftOff, &rightOff, &topOff, &bottomOff);
+            }
+        }
+      availableWidth -= (leftOff + rightOff);
+
+      // Subtract space for title bar buttons
+      CGFloat buttonSpace = 0;
+      if (styleMask & NSClosableWindowMask)
+        buttonSpace += METRICS_TITLEBAR_HEIGHT;
+      if (styleMask & NSMiniaturizableWindowMask)
+        buttonSpace += METRICS_TITLEBAR_HEIGHT;
+      if (styleMask & NSResizableWindowMask)
+        buttonSpace += METRICS_TITLEBAR_HEIGHT;
+      availableWidth -= buttonSpace + 36;
+
+      if (availableWidth > 0)
+        {
+          // Calculate inter-button width for gap-based truncation decision
+          CGFloat interButtonWidth = availableWidth + 36;
+          // Let the truncated title fill the inter-button space minus 24px on each side
+          CGFloat titleMaxWidth = interButtonWidth - 48.0;
+          NSString *truncated = EAUTruncateTitleWithMiddleEllipsis(title,
+                                                                    titleMaxWidth,
+                                                                    interButtonWidth);
+          if (truncated != title)
+            {
+              title = truncated;
+            }
+        }
+    }
+
+  // Call the original setTitle:
+  ((void (*)(id, SEL, id))_originalNSWindowSetTitle)(self, @selector(setTitle:), title);
+}
+
+@implementation Eau(NSWindowTitle)
+
++ (void) EAUswizzleNSWindowSetTitle
+{
+  static BOOL swizzled = NO;
+  if (swizzled) return;
+  swizzled = YES;
+
+  Method origMethod = class_getInstanceMethod([NSWindow class], @selector(setTitle:));
+  if (origMethod)
+    {
+      _originalNSWindowSetTitle = method_getImplementation(origMethod);
+      method_setImplementation(origMethod, (IMP)EAU_newNSWindowSetTitle);
+    }
 }
 
 @end

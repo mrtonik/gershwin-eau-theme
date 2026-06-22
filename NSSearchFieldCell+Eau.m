@@ -25,51 +25,51 @@
 
 @implementation Eau(NSSearchFieldCell)
 - (void) _overrideNSSearchFieldCellMethod_drawWithFrame: (NSRect)cellFrame inView: (NSView*)controlView {
-  EAULOG(@"_overrideNSSearchFieldCellMethod_drawWithFrame:inView");
+  NSDebugLog(@"_overrideNSSearchFieldCellMethod_drawWithFrame:inView");
   NSSearchFieldCell *xself = (NSSearchFieldCell*)self;
   [xself EAUdrawWithFrame: (NSRect)cellFrame inView: (NSView*)controlView];
 }
 
 - (NSRect) _overrideNSSearchFieldCellMethod_searchTextRectForBounds: (NSRect)rect {
-  EAULOG(@"_overrideNSSearchFieldCellMethod_searchTextRectForBounds:");
+  NSDebugLog(@"_overrideNSSearchFieldCellMethod_searchTextRectForBounds:");
   NSSearchFieldCell *xself = (NSSearchFieldCell*)self;
   return [xself EAUsearchTextRectForBounds:rect];
 }
 
 - (void) _overrideNSSearchFieldCellMethod__drawBorderAndBackgroundWithFrame: (NSRect)cellFrame
 								     inView: (NSView*)controlView {
-  EAULOG(@"_overrideNSSearchFieldCellMethod__drawBorderAndBackgroundWithFrame:inView:");
+  NSDebugLog(@"_overrideNSSearchFieldCellMethod__drawBorderAndBackgroundWithFrame:inView:");
   NSSearchFieldCell *xself = (NSSearchFieldCell*)self;
   [xself _EAUdrawBorderAndBackgroundWithFrame:cellFrame inView:controlView];
 }
 
 - (void) _overrideNSSearchFieldCellMethod_drawInteriorWithFrame: (NSRect)cellFrame inView: (NSView*)controlView {
-  EAULOG(@"_overrideNSSearchFieldCellMethod_drawInteriorWithFrame:inView:");
+  NSDebugLog(@"_overrideNSSearchFieldCellMethod_drawInteriorWithFrame:inView:");
   NSSearchFieldCell *xself = (NSSearchFieldCell*)self;
   [xself EAUdrawInteriorWithFrame:cellFrame inView:controlView];
 }
 
 - (void) _overrideNSSearchFieldCellMethod__drawEditorWithFrame: (NSRect)cellFrame
 							inView: (NSView *)controlView {
-  EAULOG(@"_overrideNSSearchFieldCellMethod__drawEditorWithFrame:inView:");
+  NSDebugLog(@"_overrideNSSearchFieldCellMethod__drawEditorWithFrame:inView:");
   NSSearchFieldCell *xself = (NSSearchFieldCell*)self;
   [xself _EAUdrawEditorWithFrame:cellFrame inView:controlView];
 }
 
 - (NSRect) _overrideNSSearchFieldCellMethod_titleRectForBounds: (NSRect)theRect {
-  EAULOG(@"_overrideNSSearchFieldCellMethod_titleRectForBounds:");
+  NSDebugLog(@"_overrideNSSearchFieldCellMethod_titleRectForBounds:");
   NSSearchFieldCell *xself = (NSSearchFieldCell*)self;
   return [xself EAUtitleRectForBounds:theRect];
 }
 
 - (NSRect) _overrideNSSearchFieldCellMethod_searchButtonRectForBounds: (NSRect)rect {
-  EAULOG(@"_overrideNSSearchFieldCellMethod_searchButtonRectForBounds:");
+  NSDebugLog(@"_overrideNSSearchFieldCellMethod_searchButtonRectForBounds:");
   NSSearchFieldCell *xself = (NSSearchFieldCell*)self;
   return [xself EAUsearchButtonRectForBounds:rect];  
 }
 
 - (NSRect) _overrideNSSearchFieldCellMethod_cancelButtonRectForBounds: (NSRect)rect {
-  EAULOG(@"_overrideNSSearchFieldCellMethod_cancelButtonRectForBounds:");
+  NSDebugLog(@"_overrideNSSearchFieldCellMethod_cancelButtonRectForBounds:");
   NSSearchFieldCell *xself = (NSSearchFieldCell*)self;
   return [xself EAUcancelButtonRectForBounds:rect];
 }
@@ -80,14 +80,21 @@
 
 - (void) EAUdrawWithFrame: (NSRect)cellFrame inView: (NSView*)controlView
 {
-  // TS: unused
-  // NSRect frame = cellFrame;
-  [super drawWithFrame: [self searchTextRectForBounds: cellFrame ]
-	 inView: controlView];
- [_search_button_cell drawWithFrame: [self searchButtonRectForBounds: cellFrame] inView: controlView];
+  // Draw the Eau search bezel + the text interior directly. We must NOT call
+  // [super drawWithFrame:] here: Eau's theme-override mechanism re-dispatches
+  // drawWithFrame: dynamically back into THIS method (super does not escape the
+  // override), so the original code recursed until the stack overflowed and the
+  // app crashed (SIGSEGV) on first draw of any NSSearchField.
+  // Calling the EAU* helpers directly reproduces what NSCell's drawWithFrame:
+  // would have done (border/background + interior) without re-dispatching.
+  [self _EAUdrawBorderAndBackgroundWithFrame: cellFrame inView: controlView];
+  [self EAUdrawInteriorWithFrame: cellFrame inView: controlView];
+
+  [_search_button_cell drawWithFrame: [self searchButtonRectForBounds: cellFrame]
+			      inView: controlView];
   if ([[self stringValue] length] > 0)
     [_cancel_button_cell drawWithFrame: [self cancelButtonRectForBounds: cellFrame]
-		       inView: controlView];
+			        inView: controlView];
 }
 
 /* This method put the "x" cell inside the Text cell */
